@@ -1,0 +1,4 @@
+numpy==1.26.4
+opencv-python==4.10.0.82
+tqdm==4.66.4
+Wand==0.6.13
