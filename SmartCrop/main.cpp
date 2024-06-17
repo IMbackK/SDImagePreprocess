@@ -302,7 +302,7 @@ void pipeline(const std::filesystem::path& path, const Config& config, Yolo& yol
 			{
 				detection.priority += 10;
 				hasmatch = true;
-				detections.push_back({0, "Face", match.confidence, 20, {255, 0, 0}, match.rect});
+				//detections.push_back({0, "Face", match.confidence, 20, {255, 0, 0}, match.rect});
 			}
 		}
 		Log(Log::DEBUG)<<detection.class_id<<": "<<detection.className<<" at "<<detection.box<<" with prio "<<detection.priority<<(hasmatch ? " has match" : "");
@@ -322,10 +322,14 @@ void pipeline(const std::filesystem::path& path, const Config& config, Yolo& yol
 
 	cv::Mat croppedImage;
 
-	if(image.size().aspectRatio() != config.targetSize.aspectRatio() && incompleate)
+	if(image.size().aspectRatio() == config.targetSize.aspectRatio())
 	{
-		intRoi.getCropRectangle(crop, detections, image.size());
-
+		croppedImage = image;
+	}
+	else
+	{
+		if(incompleate)
+			intRoi.getCropRectangle(crop, detections, image.size());
 		if(config.debug)
 		{
 			cv::Mat debugImage = image.clone();
@@ -336,14 +340,6 @@ void pipeline(const std::filesystem::path& path, const Config& config, Yolo& yol
 		}
 
 		croppedImage = image(crop);
-	}
-	else if(!incompleate)
-	{
-		croppedImage = image(crop);
-	}
-	else
-	{
-		croppedImage = image;
 	}
 
 	cv::Mat resizedImage;

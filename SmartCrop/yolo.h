@@ -42,9 +42,9 @@ public:
 	};
 
 private:
-	static constexpr float modelConfidenceThreshold = 0.25;
-	static constexpr float modelScoreThreshold = 0.45;
-	static constexpr float modelNMSThreshold = 0.50;
+	static constexpr float modelConfidenceThreshold = 0.20;
+	static constexpr float modelScoreThreshold = 0.40;
+	static constexpr float modelNMSThreshold = 0.45;
 
 	std::string modelPath;
 	std::vector<std::pair<std::string, int>> classes;
