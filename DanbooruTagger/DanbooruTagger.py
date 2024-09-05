@@ -1,5 +1,5 @@
-import warnings
 from deepdanbooru_onnx import DeepDanbooru
+from wd_onnx import Wd
 from PIL import Image
 import argparse
 import cv2
@@ -13,13 +13,20 @@ image_ext_ocv = [".bmp", ".jpeg", ".jpg", ".png"]
 
 
 def find_image_files(path: str) -> list[str]:
-	paths = list()
-	for root, dirs, files in os.walk(path):
-		for filename in files:
-			name, extension = os.path.splitext(filename)
-			if extension.lower() in image_ext_ocv:
-				paths.append(os.path.join(root, filename))
-	return paths
+	if os.path.isdir(path):
+		paths = list()
+		for root, dirs, files in os.walk(path):
+			for filename in files:
+				name, extension = os.path.splitext(filename)
+				if extension.lower() in image_ext_ocv:
+					paths.append(os.path.join(root, filename))
+		return paths
+	else:
+		name, extension = os.path.splitext(path)
+		if extension.lower() in image_ext_ocv:
+			return [path]
+		else:
+			return []
 
 
 def image_loader(paths: list[str]):
@@ -35,14 +42,28 @@ def image_loader(paths: list[str]):
 			yield image_pil, path
 
 
-def pipeline(queue: Queue, image_paths: list[str], device: int):
-	danbooru = DeepDanbooru()
+def danbooru_pipeline(queue: Queue, image_paths: list[str], device: int, cpu: bool):
+	danbooru = DeepDanbooru("cpu" if cpu else "auto")
 
 	for path in image_paths:
 		imageprompt = ""
 		tags = danbooru(path)
 		for tag in tags:
 			imageprompt = imageprompt + ", " + tag
+		imageprompt = imageprompt[2:]
+
+		queue.put({"file_name": path, "text": imageprompt})
+
+
+def wd_pipeline(queue: Queue, image_paths: list[str], device: int, cpu: bool):
+	wd = Wd("cpu" if cpu else "auto", threshold=0.3)
+
+	for path in image_paths:
+		imageprompt = ""
+		tags = wd(path)
+		for tag in tags:
+			imageprompt = imageprompt + ", " + tag
+		imageprompt = imageprompt[2:]
 
 		queue.put({"file_name": path, "text": imageprompt})
 
@@ -57,49 +78,71 @@ def split_list(input_list, count):
 def save_meta(meta_file, meta, reldir, common_description):
 	meta["file_name"] = os.path.relpath(meta["file_name"], reldir)
 	if common_description is not None:
-		meta["text"] = common_description + meta["text"]
+		meta["text"] = common_description + ", " + meta["text"]
 	meta_file.write(json.dumps(meta) + '\n')
 
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser("A script to tag images via DeepDanbooru")
-	parser.add_argument('--batch', '-b', default=4, type=int, help="Batch size to use for inference")
 	parser.add_argument('--common_description', '-c', help="An optional description that will be preended to the ai generated one")
-	parser.add_argument('--image_dir', '-i', help="A directory containg the images to tag")
+	parser.add_argument('--image_dir', '-i', help="A directory containg the images to tag or a singular image to tag")
+	parser.add_argument('--wd', '-w', action="store_true", help="use wd tagger instead of DeepDanbooru")
+	parser.add_argument('--cpu', action="store_true", help="force cpu usge instead of gpu")
 	args = parser.parse_args()
 
-	nparalell = 2
-
 	image_paths = find_image_files(args.image_dir)
+
+	if len(image_paths) == 0:
+		print("Unable to find any images at {args.image_dir}")
+		exit(1)
+
+	nparalell = 4 if len(image_paths) > 4 else len(image_paths)
 	image_path_chunks = list(split_list(image_paths, nparalell))
 
-	print(f"Will use {nparalell} processies to create tags")
+	print(f"Will use {nparalell} processies to create tags for {len(image_paths)} images")
 
 	queue = Queue()
+	pipe = danbooru_pipeline if not args.wd else wd_pipeline
 	processies = list()
 	for i in range(0, nparalell):
-		processies.append(Process(target=pipeline, args=(queue, image_path_chunks[i], i)))
+		processies.append(Process(target=pipe, args=(queue, image_path_chunks[i], i, args.cpu)))
 		processies[-1].start()
 
 	progress = tqdm(desc="Generateing tags", total=len(image_paths))
 	exit = False
-	with open(os.path.join(args.image_dir, "metadata.jsonl"), mode='w') as output_file:
+
+	if len(image_paths) > 1:
+		with open(os.path.join(args.image_dir, "metadata.jsonl"), mode='w') as output_file:
+			while not exit:
+				if not queue.empty():
+					meta = queue.get()
+					save_meta(output_file, meta, args.image_dir, args.common_description)
+					progress.update()
+				exit = True
+				for process in processies:
+					if process.is_alive():
+						exit = False
+						break
+
+			while not queue.empty():
+				meta = queue.get()
+				save_meta(output_file, meta, args.image_dir, args.common_description)
+				progress.update()
+	else:
 		while not exit:
 			if not queue.empty():
 				meta = queue.get()
-				save_meta(output_file, meta, args.image_dir, args.common_description)
+				print(meta)
 				progress.update()
 			exit = True
 			for process in processies:
 				if process.is_alive():
 					exit = False
 					break
-
 		while not queue.empty():
 			meta = queue.get()
-			save_meta(output_file, meta, args.image_dir, args.common_description)
+			print(meta)
 			progress.update()
 
 	for process in processies:
 		process.join()
-
