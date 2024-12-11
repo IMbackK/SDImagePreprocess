@@ -29,9 +29,9 @@ private:
 	int personId;
 	static bool compPointPrio(const std::pair<cv::Point2i, int>& a, const std::pair<cv::Point2i, int>& b, const cv::Point2i& center);
 	static void slideRectToPoint(cv::Rect& rect, const cv::Point2i& point);
-	static cv::Rect maxRect(bool& incompleate, const cv::Size2i& imageSize, std::vector<std::pair<cv::Point2i, int>> mustInclude = {});
+	static cv::Rect maxRect(bool& incompleate, const cv::Size2i& imageSize, double targetAspectRatio, std::vector<std::pair<cv::Point2i, int>> mustInclude = {});
 
 public:
 	InteligentRoi(const Yolo& yolo);
-	bool getCropRectangle(cv::Rect& out, const std::vector<Yolo::Detection>& detections, const cv::Size2i& imageSize);
+	bool getCropRectangle(cv::Rect& out, const std::vector<Yolo::Detection>& detections, const cv::Size2i& imageSize, double targetAspectRatio);
 };

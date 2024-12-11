@@ -40,7 +40,8 @@ static struct argp_option options[] =
   {"out",	 		'o', "[DIRECTORY]",	0,	"directory whre images are to be saved" },
   {"debug", 		'd', 0,				0,	"output debug images" },
   {"seam-carving", 	's', 0,				0,	"use seam carving to change image aspect ratio instead of croping"},
-  {"size", 			'z', "[PIXELS]",	0,	"target output size, default: 512"},
+  {"x-size", 		'x', "[PIXELS]",	0,	"target output width, default: 1024"},
+  {"y-size", 		'y', "[PIXELS]",	0,	"target output height, default: 1024"},
   {"focus-person",	'f', "[FILENAME]",	0,	"a file name to an image of a person that the crop should focus on"},
   {"person-threshold",	't', "[NUMBER]",	0,	"the threshold at witch to consider a person matched, defaults to 0.363"},
   {0}
@@ -56,7 +57,7 @@ struct Config
 	bool seamCarving = false;
 	bool debug = false;
 	double threshold = 0.363;
-	cv::Size targetSize = cv::Size(512, 512);
+	cv::Size targetSize = cv::Size(1024, 1024);
 };
 
 static error_t parse_opt (int key, char *arg, struct argp_state *state)
@@ -93,10 +94,16 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state)
 		case 't':
 			config->threshold = std::atof(arg);
 			break;
-		case 'z':
+		case 'x':
 		{
 			int x = std::stoi(arg);
-			config->targetSize = cv::Size(x, x);
+			config->targetSize = cv::Size(x, config->targetSize.height);
+			break;
+		}
+		case 'y':
+		{
+			int y = std::stoi(arg);
+			config->targetSize = cv::Size(config->targetSize.width, y);
 			break;
 		}
 		case ARGP_KEY_ARG:

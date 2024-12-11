@@ -29,6 +29,7 @@
 #include <string>
 #include <vector>
 #include <numeric>
+#include <opencv2/highgui.hpp>
 
 #include "yolo.h"
 #include "log.h"
@@ -309,7 +310,7 @@ void pipeline(const std::filesystem::path& path, const Config& config, Yolo& yol
 	}
 
 	cv::Rect crop;
-	bool incompleate = intRoi.getCropRectangle(crop, detections, image.size());
+	bool incompleate = intRoi.getCropRectangle(crop, detections, image.size(), config.targetSize.aspectRatio());
 
 	if(config.seamCarving && incompleate)
 	{
@@ -329,7 +330,7 @@ void pipeline(const std::filesystem::path& path, const Config& config, Yolo& yol
 	else
 	{
 		if(incompleate)
-			intRoi.getCropRectangle(crop, detections, image.size());
+			intRoi.getCropRectangle(crop, detections, image.size(), config.targetSize.aspectRatio());
 		if(config.debug)
 		{
 			cv::Mat debugImage = image.clone();
@@ -444,7 +445,7 @@ int main(int argc, char* argv[])
 	}
 
 	std::vector<std::thread> threads;
-	std::vector<std::vector<std::filesystem::path>> imagePathParts = splitVector(imagePaths, std::thread::hardware_concurrency());
+	std::vector<std::vector<std::filesystem::path>> imagePathParts = splitVector(imagePaths, 1/*std::thread::hardware_concurrency()*/);
 
 	for(size_t i = 0; i < imagePathParts.size(); ++i)
 		threads.push_back(std::thread(threadFn, imagePathParts[i], std::ref(config),  recognizer, std::ref(recognizerMutex), std::ref(debugOutputPath)));

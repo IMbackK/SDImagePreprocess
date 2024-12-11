@@ -51,12 +51,16 @@ void InteligentRoi::slideRectToPoint(cv::Rect& rect, const cv::Point2i& point)
 	}
 }
 
-cv::Rect InteligentRoi::maxRect(bool& incompleate, const cv::Size2i& imageSize, std::vector<std::pair<cv::Point2i, int>> mustInclude)
+cv::Rect InteligentRoi::maxRect(bool& incompleate, const cv::Size2i& imageSize, double targetAspectRatio, std::vector<std::pair<cv::Point2i, int>> mustInclude)
 {
 	incompleate = false;
-	int diameter = std::min(imageSize.height, imageSize.width);
+
 	cv::Point2i point(imageSize.width/2, imageSize.height/2);
-	cv::Rect candiate(point.x-diameter/2, point.y-diameter/2, diameter, diameter);
+	cv::Rect candiate;
+	if(imageSize.width/targetAspectRatio > imageSize.height)
+		candiate = cv::Rect(point.x-(imageSize.height*(targetAspectRatio/2)), 0, imageSize.height*targetAspectRatio, imageSize.height);
+	else
+		candiate = cv::Rect(0, point.y-(imageSize.width/targetAspectRatio)/2, imageSize.width, imageSize.width/targetAspectRatio);
 
 	std::sort(mustInclude.begin(), mustInclude.end(),
 		[&point](const std::pair<cv::Point2i, int>& a, const std::pair<cv::Point2i, int>& b){return compPointPrio(a, b, point);});
@@ -64,7 +68,7 @@ cv::Rect InteligentRoi::maxRect(bool& incompleate, const cv::Size2i& imageSize, 
 	while(true)
 	{
 		cv::Rect includeRect = rectFromPoints(mustInclude);
-		if(includeRect.width-2 > diameter || includeRect.height-2 > diameter)
+		if(includeRect.width-2 > candiate.width || includeRect.height-2 > candiate.height)
 		{
 			incompleate = true;
 			slideRectToPoint(candiate, mustInclude.back().first);
@@ -99,30 +103,33 @@ InteligentRoi::InteligentRoi(const Yolo& yolo)
 	personId = yolo.getClassForStr("person");
 }
 
-bool InteligentRoi::getCropRectangle(cv::Rect& out, const std::vector<Yolo::Detection>& detections, const cv::Size2i& imageSize)
+bool InteligentRoi::getCropRectangle(cv::Rect& out, const std::vector<Yolo::Detection>& detections, const cv::Size2i& imageSize, double targetAspectRatio)
 {
 	std::vector<std::pair<cv::Point2i, int>> corners;
 	for(size_t i = 0; i < detections.size(); ++i)
 	{
 		int priority = detections[i].priority;
-		if(detections[i].class_id == personId)
+		if(priority > 0)
 		{
-			corners.push_back({detections[i].box.tl()+cv::Point2i(detections[i].box.width/2, 0), priority+2});
-			corners.push_back({detections[i].box.tl(), priority+1});
-			corners.push_back({detections[i].box.br(), priority});
-			corners.push_back({detections[i].box.tl()+cv::Point2i(detections[i].box.width, 0), priority+1});
-			corners.push_back({detections[i].box.br()+cv::Point2i(0-detections[i].box.width, 0), priority});
-		}
-		else
-		{
-			corners.push_back({detections[i].box.tl(), priority});
-			corners.push_back({detections[i].box.br(), priority});
-			corners.push_back({detections[i].box.tl()+cv::Point2i(detections[i].box.width, 0), priority});
-			corners.push_back({detections[i].box.br()+cv::Point2i(0-detections[i].box.width, 0), priority});
+			if(detections[i].class_id == personId)
+			{
+				corners.push_back({detections[i].box.tl()+cv::Point2i(detections[i].box.width/2, 0), priority+2});
+				corners.push_back({detections[i].box.tl(), priority+1});
+				corners.push_back({detections[i].box.br(), priority});
+				corners.push_back({detections[i].box.tl()+cv::Point2i(detections[i].box.width, 0), priority+1});
+				corners.push_back({detections[i].box.br()+cv::Point2i(0-detections[i].box.width, 0), priority});
+			}
+			else
+			{
+				corners.push_back({detections[i].box.tl(), priority});
+				corners.push_back({detections[i].box.br(), priority});
+				corners.push_back({detections[i].box.tl()+cv::Point2i(detections[i].box.width, 0), priority});
+				corners.push_back({detections[i].box.br()+cv::Point2i(0-detections[i].box.width, 0), priority});
+			}
 		}
 	}
 
 	bool incompleate;
-	out = maxRect(incompleate, imageSize, corners);
+	out = maxRect(incompleate, imageSize, targetAspectRatio, corners);
 	return incompleate;
 }
